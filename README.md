@@ -1,7 +1,7 @@
 
 # EDMD_Triboelectric_Models
 
- My simple event-driven molecular dynamics models for triboelectric charging
+ My simple event-driven molecular dynamics models for triboelectric charging of aerosols
 
  The main single electron model is the "Single_Electron_Model.py", this then calls "lack_functions.py" for various functions and uses "lack_plots.py" to produce plots. The outputs of the simulation are written to "lack_model_output.txt" which can be read back in for plotting using "lack_reader.py"
 
