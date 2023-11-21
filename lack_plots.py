@@ -21,7 +21,7 @@ def plot_3D(data):
     
 
 
-def speed_histogram(vel_data, n_bins):
+def speed_histogram(vel_data, n_bins=15):
     
     '''Plots histogram of speeds of particles from array of 3D velocities'''
     
@@ -62,4 +62,17 @@ def scatter_speeds(vel_data, radii):
     
 
 
-
+def plot_charge(radii, charge):
+    
+    '''Plots charge normalised as a dimensionless quantity against radii'''
+    
+    plt.figure(dpi=600)
+    
+    plt.plot(radii, charge, "x", color='r')
+    
+    plt.xlabel('Radius / d$_p$')
+    plt.ylabel('Charge / 4$\pi p_{H0}\lambda^2$e')
+    
+    plt.show()
+    
+    

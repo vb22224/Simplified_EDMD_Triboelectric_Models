@@ -7,6 +7,7 @@ import math as m
 from tqdm import tqdm
 import lack_plots as lp
 import lack_functions as lf
+import lack_functions as lf
 
 
 
@@ -23,11 +24,17 @@ def main(**args):
     mass_dependent, density = args['mass_dependent'], args['density']
     lower_radius_frac, poly_disperse = args['lower_radius_frac'], args['poly_disperse']
     charge_density = args['charge_density']
+    log_mean, log_sd = args['log_mean'], args['log_sd']
 
-    if poly_disperse == False:
+    if poly_disperse == "bi":
         radii = np.concatenate([np.ones(m.ceil(n_particles * lower_radius_frac)) * radius_l, np.ones(m.floor(n_particles * (1 - lower_radius_frac))) * radius_u])
-    elif poly_disperse == True:
+    elif poly_disperse == "lin":
         radii = np.random.rand(n_particles) * (radius_u - radius_l) + radius_l
+    elif poly_disperse == "lognorm":
+        radii = 10 ** np.random.normal(loc=np.log10(log_mean), scale=log_sd, size=n_particles)
+    else:
+        raise ValueError("poly_disperse should be lognormal (lognorm), linear (lin), or bidisperse (bi)")
+        
 
     if mass_dependent == True:
         masses = lf.v_spherical_mass(radii, density)
@@ -134,10 +141,10 @@ def main(**args):
 
     lf.write_output(args, radii, masses, r0, v0, high_energy_states, energy_states, charges)
 
-    #lp.speed_histogram(v0, 15)
-    #lp.scatter_speeds(v0, radii)
-    #lp.plot_3D(r0)
-    #print(lf.calc_den (box_length, radii))
+    # lp.speed_histogram(v0, 15)
+    # lp.scatter_speeds(v0, radii)
+    # lp.plot_3D(r0)
+    print("\n", lf.calc_den(box_length, radii))
 
     #print("\n Simulation Complete")
 
@@ -148,19 +155,21 @@ def main(**args):
 if __name__ == "__main__":
 
     params = {
-        'box_length': 50,
-        'n_particles': 300,
-        'n_eqil_steps': 10,
-        'n_sim_steps': 10,
+        'box_length': 500,
+        'n_particles': 100,
+        'n_eqil_steps': 1000,
+        'n_sim_steps': 10000,
         'radius_l': 0.3,
         'lower_radius_frac': 0.5,
         'radius_u': 1.7,
         'speed_l':1.0,
         'speed_u':2.0,
         'mass_dependent': True,
-        'poly_disperse': True,
+        'poly_disperse': "lognorm", # Should be lognormal (lognorm), linear (lin), or bidisperse (bi)
         'density': 1.0,
-        'charge_density': 1
+        'charge_density': 0.001,
+        'log_mean': 30, # Mean of the distribution if lognormal
+        'log_sd': 0.2 # Standard deviation of the distribution if lognormal
         }
 
     output = main(**params)
