@@ -17,13 +17,12 @@ vel = df[['velocity(x)', 'velocity(y)', 'velocity(z)']].to_numpy()
 pos = df[['position(x)', 'position(y)', 'position(z)']].to_numpy()
 radii, charge = df['radii'], -df['charge']
 
-
 # sns.scatterplot(x = "radii", y = "charge", data = df) # Plot charge against radii
 
-
+# lp.size_histogram(radii, n_bins=15)
 # lp.speed_histogram(vel, 10)
 # lp.scatter_speeds(vel, radii)
-# lp.plot_3D(pos)
-lp.plot_charge(radii, charge)
+lp.plot_3D(pos, charge, radii)
+# lp.plot_charge(radii, charge)
 
 

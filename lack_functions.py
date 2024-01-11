@@ -102,19 +102,19 @@ def t_coll(r0, v0, radii, n_particles):
 
 
 
-def calc_den(box_length, radii):
+def calc_box_len(target_packing, radii):
     
-    '''Returns the packing fraction from inputs of the box length and radii of all particles'''
+    '''Returns the packing box length required to acheive the target packing fraction for a specified radii array'''
 
-    box_volume = box_length ** 3
     particle_volume = 0.0
     
     for r in radii:
-        particle_volume =+ (4 / 3) * m.pi * (r ** 3)
+        particle_volume += (4 / 3) * m.pi * (r ** 3)
     
-    packing_frac = particle_volume / box_volume
+    box_volume = particle_volume / target_packing
+    box_length = box_volume ** (1 / 3)
 
-    return packing_frac
+    return box_length
     
 
 
@@ -140,7 +140,7 @@ def write_output(params, radii, masses, r0, v0, high_energy_states, energy_state
         
         f.write('Parameters: \n')
         for key,value in params.items():
-            f.write(str(key) + '\t' + str(value) + '\n')
+            f.write(str(key) + ': \t' + str(value) + '\n')
         
         f.write('\nradii,masses,position(x),position(y),position(z),velocity(x),velocity(y),velocity(z),initial high e,final high e,final low e,charge\n')
         df = pd.DataFrame(data=[radii, masses, r0[:,0], r0[:,1], r0[:,2], v0[:,0], v0[:,1], v0[:,2], high_energy_states, energy_states[:,0], energy_states[:,1], charges]).transpose()

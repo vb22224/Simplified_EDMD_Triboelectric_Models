@@ -2,21 +2,54 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import math as m
 import lack_functions as lf
+from matplotlib.ticker import ScalarFormatter
 
 
 
-def plot_3D(data):
+def plot_3D(data, scale, size):
     
-    '''Plots the data as a scatter plot in 3D'''
-    
+    '''Plots the data as a scatter plot in 3D, sized by radii and coloured by scale'''
+
     fig = plt.figure(dpi=600)
-    ax = fig.add_subplot(projection='3d')
-    ax.scatter(data[:,0], data[:,1], data[:,2], color='b')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
+    
+    # Create a grid of subplots with 1 row and 2 columns
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 0.05])
+
+    # Plot the 3D scatter plot
+    ax = fig.add_subplot(gs[0], projection='3d')
+    scatter = ax.scatter(data[:,0]/1000, data[:,1]/1000, data[:,2]/1000, s=size, c=scale, cmap='Spectral', alpha=0.6)
+
+    ax.set_xlabel('X / mm')
+    ax.set_ylabel('Y / mm')
+    ax.set_zlabel('Z / mm')
+
+    # Add colorbar to the right of the plot
+    cax = fig.add_subplot(gs[1])
+    cbar = plt.colorbar(scatter, cax=cax, pad=0.1)  # Adjust the pad parameter to set the distance
+
+    cbar.set_label('Charge / e')
+
+    plt.show()
+
+
+
+def size_histogram(radii, n_bins=15):
+    
+    """Pots a gistogram for the size distribution of particles from their radii"""
+    
+    size_array = radii * 2
+    
+    plt.figure(dpi=600)
+    
+    log_bins = np.logspace(np.log10(size_array.min()), np.log10(size_array.max()), n_bins)
+    plt.hist(size_array, bins=log_bins, edgecolor='black')
+    
+    plt.xlabel('d$_p$ / $\mathrm{\mu}$m')
+    plt.ylabel('Frequency')
+    plt.xscale('log')
+    plt.gca().xaxis.set_major_formatter(ScalarFormatter())
+    
     plt.show()
     
 
