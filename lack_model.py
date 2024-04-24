@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 
-'''Lacks model implimented with a simple time driven molecular dynamic simulation under teh single electrontranfer assumption'''
+'''
+Lacks model implimented with a simple time driven molecular dynamic simulation under the single electrontranfer assumption
+2nd model iteration aimed to increse speed with only re-computing relevant colission times in the colission time matrix
+'''
 
 import numpy as np
 import math as m
 from tqdm import tqdm
 import lack_plots as lp
 import lack_functions as lf
+import csv
 
 
 
@@ -14,7 +18,7 @@ def main(**args):
 
     '''Main run of the simulation'''
 
-    #passing parameters then setting size, mass, position and velcity of all the particles
+    # Passing parameters then setting size, mass, position and velcity of all the particles
 
     target_packing, n_particles = args['target_packing'], args['n_particles']
     n_eqil_steps, n_sim_steps = args['n_eqil_steps'], args['n_sim_steps']
@@ -24,23 +28,34 @@ def main(**args):
     lower_radius_frac, poly_disperse = args['lower_radius_frac'], args['poly_disperse']
     charge_density = args['charge_density']
     log_mean, log_sd = args['log_mean'], args['log_sd']
+    
+    # Debugging options
+    position_check = False
+    
+    # Create animation?
+    animate = False
+    save_animation = False
+    animation_save_dir = "..\\Animation\\test2\\" # Directory to save file for animation
+    charge_range=[-5, 20]
+    dpi = 600
 
-    if poly_disperse == "bi":
+    # Setting the size distribution depending ong the opton chosen
+
+    if poly_disperse == "bi": # Bidisperse
         radii = np.concatenate([np.ones(m.ceil(n_particles * lower_radius_frac)) * radius_l, np.ones(m.floor(n_particles * (1 - lower_radius_frac))) * radius_u])
         
-    elif poly_disperse == "lin":
+    elif poly_disperse == "lin": # Linear
         radii = np.random.rand(n_particles) * (radius_u - radius_l) + radius_l
         
-    elif poly_disperse == "lognorm":
+    elif poly_disperse == "lognorm": # Lognormal
         radii = (10 ** np.random.normal(loc=np.log10(log_mean), scale=log_sd, size=n_particles)) / 2 # divied by 2 as radii
         
-    elif poly_disperse == "custom":
-        # Edit here custom distribution, example case trimodal
+    elif poly_disperse == "custom": # Edit here custom distribution, example case trimodal lognormal distribution
         
-        mode_sizes = 0.256606402401898, 2.4228080487548, 4.0027234441298 # relative sizes of modes
-        mode_means = 0.737583517782131, 15.4731936342651, 60.8088746718146 # means od modes / um
-        mode_stds = 0.156480467816352, 0.475667613501583, 0.360667409965912 # modes standard distributions (logspace)
-        
+        mode_sizes = 1.3372369011358565, 1.8294215846230424, 0.7710494963408324
+        mode_means = 2.6318881833274417, 23.901773009607787, 94.28044421263712
+        mode_stds = 0.4152722158226693, 0.41307671264643286, 0.22553581549487198
+    
         total_size = np.sum(mode_sizes)
         radii = np.array([])
         
@@ -49,44 +64,71 @@ def main(**args):
             mode_radii = (10 ** np.random.normal(loc=np.log10(mode_means[number]), scale=mode_stds[number], size=mode_particles)) / 2 # divied by 2 as radii
             radii = np.concatenate((radii, mode_radii))
         
-        n_particles = len(radii) # In case a particle has been lost / gained in rounding
+        truncation = float('inf') # used to truncate the size distribution function
+        radii = radii[radii <= truncation]
+        
+        n_particles = len(radii) # In case a particle has been lost / gained in rounding or truncating
+        
+    elif poly_disperse == "dustyboi": # David's distribution
+        
+        quantity = np.round(n_particles * np.array([0.128315105, 0.183572807, 0.124311959, 0.087425835, 0.062477661, 0.051611981, 0.135821002, 0.208449496, 0.018014154]))
+        particle_sizes = np.array([1.0, 3.0, 6.0, 12.0, 23.5, 47.0, 94.0, 187.5, 375.0])
+        ranges = np.array([1.0, 1.0, 2.0, 4.0, 7.5, 16.0, 31.0, 62.5, 125.0])
+        psq = np.vstack((particle_sizes, quantity, ranges)).T
+        radii = [0.5 * (size + ((2 * (np.random.random() - 0.5)) * rad_range)) for size, q, rad_range in psq for _ in range(int(q))]
+                
+        n_particles = np.size(radii)
 
     else:
         raise ValueError("poly_disperse should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (custom).")
         
+    # Setting Particle Mass
+    
     if mass_dependent == True:
         masses = lf.v_spherical_mass(radii, density)
     elif mass_dependent == False:
         masses = np.ones(n_particles)
 
+    # Calculating the number of initial high energy states
+    
     high_energy_states = lf.v_surface_charge_calc(radii, charge_density)
     energy_states = np.stack((high_energy_states, np.zeros(high_energy_states.size, dtype=int)), axis=1)
-
+    
+    # Calculates the required box size for the specified density and puts the particles in the box
+    
     box_length = lf.calc_box_len(target_packing, radii)
+    print(f'In a box of length: {round(box_length / 1000, 2)} mm')
 
-    overlaps = []
-    n_overlaps = 1
+    p_overlaps, w_overlaps = [], []
+    n_p_overlaps,  n_w_overlaps = 1, 1
     r0 = np.random.rand(n_particles, 3) * box_length #initial positions
 
-    while n_overlaps != 0: #checks for overlaps and replaces them
-        overlaps = lf.overlap_check(r0, radii, n_particles)
-        n_overlaps = len(overlaps)
-        overlaps = np.sort(overlaps)[:: -1 ]
+    while n_p_overlaps != 0 and n_w_overlaps != 0: #checks for overlapping particles or particles not in box and replaces them
+        p_overlaps = lf.overlap_check(r0, radii, n_particles)
+        n_p_overlaps = len(p_overlaps)
+        p_overlaps = np.sort(p_overlaps)[:: -1 ]
 
-        for o in overlaps:
+        for o in p_overlaps:
             r0 = np.delete(r0, o, axis=0)
 
-        r0 = np.concatenate([r0, (np.random.rand(n_overlaps, 3) * box_length)])
+        r0 = np.concatenate([r0, (np.random.rand(n_p_overlaps, 3) * box_length)])
 
-    while n_overlaps != 0: #checks for particles overlapping with the box and replaces them
-        overlaps = lf.out_of_bounds(r0, radii, n_particles, box_length)
-        n_overlaps = len(overlaps)
-        overlaps = np.sort(overlaps)[:: -1 ]
+        w_overlaps = lf.out_of_bounds(r0, radii, n_particles, box_length)
+        n_w_overlaps = len(w_overlaps)
+        w_overlaps = np.sort(w_overlaps)[:: -1 ]
 
-        for o in overlaps:
+        for o in w_overlaps:
             r0 = np.delete(r0, o, axis=0)
 
-        r0 = np.concatenate([r0, (np.random.rand(n_overlaps, 3) * box_length)])
+        r0 = np.concatenate([r0, (np.random.rand(n_w_overlaps, 3) * box_length)])
+    
+    if position_check:
+        print(f'Number of coordinates initially less than 0: {np.count_nonzero(r0 < 0)}')
+        print(f'Number of coordinates initially greater than the length of box: {np.count_nonzero(r0 > box_length)}')
+        print(f'Number of particles: {n_particles}')
+    
+    
+    # Sets the speeds of the particles
 
     speed = (np.random.rand(n_particles) - 0.5) * 2 * (speed_u - speed_l)
 
@@ -97,11 +139,11 @@ def main(**args):
             speed[s] += speed_l
 
     direction =  (np.random.rand(n_particles, 3) - 0.5) * 2
-    norm_vel = np.empty (0)
+    norm_vel = np.empty(0)
 
     for d in range(n_particles):
         x, y, z = direction[d][0], direction[d][1], direction[d][2]
-        norm = m.sqrt(x **2 + y ** 2 + z ** 2)
+        norm = m.sqrt(x ** 2 + y ** 2 + z ** 2)
         norm_vel = np.append(norm_vel, [x / norm, y / norm, z / norm])
 
     speed = np.reshape(speed, (n_particles, 1))
@@ -109,51 +151,65 @@ def main(**args):
     v0 = norm_vel * speed
     #speed_histogram(v0, 10)
     
+    # Intiallising collision times
+    
+    coll_times = np.full((n_particles, n_particles), np.inf) # Particle collision matrix
+    wall_times = np.full((n_particles, 6), np.inf) # 6 sides of the cube
+    
+    for i in range(n_particles):
+        wall_times[i] = lf.t_wall(r0[i], v0[i], radii[i], box_length) # Times until each wall is hit
+        for j in range(i + 1, n_particles):
+            coll_times[i][j] = lf.t_coll(r0[i], r0[j], v0[i], v0[j], radii[i], radii[j])
+            
+    # print(np.sum(~np.isinf(coll_times))) # Can check number of potential collisions
     print(f'Initial number of high energy states: {np.sum(high_energy_states)}')
     
     escape, equilibrated = False, False
+    frame, csv_name = 0, animation_save_dir + 'timings.csv'
     
-    while escape == False:
+    while escape == False: # Loop for the main simualation
         
         if equilibrated == False:
             n_sim_steps += n_eqil_steps
         
-        for step in tqdm(range(n_sim_steps)):
-        # for step in range(n_eqil_steps + n_sim_steps):
-    
-            wall_times = lf.vt_wall(r0, v0, box_length) #checking how long untill a wall hit
-            wall_time_index = wall_times.argmin()
-            wall_time = wall_times[m.floor(wall_time_index / 3)][wall_time_index % 3]
-    
-            coll_times = lf.t_coll(r0, v0, radii, n_particles) #checking how long until a particle collision
-    
-            if len(coll_times) > 0:
-                coll_time_index = coll_times[:,2].argmin()
-                coll_time = coll_times[coll_time_index][2]
-            else:
-                coll_time = np.array([wall_time + 1]) #in case of no collisions
-    
-    
-            if wall_time <= coll_time:
-                #print('Wall!')
-                r0 += (v0 * wall_time)
-                v0[m.floor(wall_time_index / 3)][wall_time_index % 3] *= -1
-            else:
-                #print('Coll!')
-                r0 += (v0 * coll_time)
-                i, j = int(coll_times[coll_time_index][0]), int(coll_times[coll_time_index][1])
+        for step in tqdm(range(n_sim_steps)): # With progress bar
+        # for step in range(n_eqil_steps + n_sim_steps): # Without progress bar
+            
+            t_wall, t_coll = np.min(wall_times), np.min(coll_times) # First collsions
+
+            if t_wall <= t_coll: # Wall collision
+                # print('Wall!')
+                time_step = t_wall
+                r0 += (v0 * t_wall) # Update positions
+                particle_index = np.where(wall_times == t_wall)[0][0] # Which partilcle hit
+                wall_index = np.where(wall_times == t_wall)[1][0] # Which wall was hit
+                wall_times -= t_wall # Update wall collision times until wall hit
+                coll_times -= t_wall # Update particle collision times until wall hit
+                v0[particle_index][wall_index // 2] *= -1 # Particle bounce off wall
+                recalc_p = [particle_index] # Particle to recalulate the particle collions for
+                
+            else: # Partilcle collsion
+                # print('Coll!')
+                time_step = t_coll
+                r0 += (v0 * t_coll) # Update positions
+                i, j = int(np.where(coll_times == t_coll)[0][0]), int(np.where(coll_times == t_coll)[1][0]) # Which particles hit
+                wall_times -= t_coll # Update wall collision times until particle hit
+                coll_times -= t_coll # Update particle collision times until particle hit
+                
+                # Maths to find new particle trajectories
                 ui, uj, Rij, Rji = v0[i], v0[j], r0[j] - r0[i], r0[i] - r0[j]
                 mi, mj, Rij_hat, Rji_hat = masses[i], masses[j], Rij / lf.mag(Rij), Rji / lf.mag(Rji)
-    
                 ui_para, uj_para = (np.dot(ui, Rij_hat)) * Rij_hat, (np.dot(uj, Rji_hat)) * Rji_hat
                 vi_perp, vj_perp = ui - ui_para, uj - uj_para
                 vi_para = (ui_para * (mi - mj) + 2 * mj * uj_para) / (mi + mj)
                 vj_para = (uj_para * (mj - mi) + 2 * mi * ui_para) / (mj + mi)
                 vi, vj = vi_para + vi_perp, vj_para + vj_perp
-                v0[i], v0[j] = vi, vj
-                #print(mag(Rij))
+                v0[i], v0[j] = vi, vj # Updating new velocities
                 
-                if step > n_eqil_steps or equilibrated == True:
+                recalc_p = [i, j] # Particles to recalulate the particle collions for
+                wall_index = 'inf' # Not a wall hit
+                
+                if step > n_eqil_steps or equilibrated == True: # If not equilibrating -> do the charge transfer
                     equilibrated = True
                     ei, ej = energy_states[i], energy_states[j]
         
@@ -168,12 +224,45 @@ def main(**args):
                     print("Simulation complete as no high-energy electrons remain")
                     escape = True
                     break
-        
+            
+            for p in recalc_p: # Particles that need collsions recalculating
+                # Recaculating relevant wall collsions
+                wall_times[p] = lf.t_wall(r0[p], v0[p], radii[p], box_length, hit=wall_index)
+                
+                # Recaculating relevant particle collsions
+                for a in range(0, p): # Vertically in collsion matrix
+                    coll_times[a][p] = lf.t_coll(r0[a], r0[p], v0[a], v0[p], radii[a], radii[p])
+                for b in range(p + 1, n_particles): # Horizontally in collsion matrix
+                    coll_times[p][b] = lf.t_coll(r0[p], r0[b], v0[p], v0[b], radii[p], radii[b])
+                
+                if wall_index == 'inf': # If particle collsion
+                    coll_times[i][j] = 'inf' # Particles cant immidiately re-collide
+            
+            if animate or save_animation: # Showing the simulation as it runs
+                name = str(frame)
+                save_name = animation_save_dir + name
+                charges = energy_states[:,0] + energy_states[:,1] - high_energy_states
+                lp.plot_3D(r0, -charges, radii, box_length=box_length/1000, charge_range=charge_range, show=animate, save=save_animation, save_path=save_name, dpi=dpi)
+                
+                if save_animation: # Saving the frames as the simulation goes
+                    data = [f'{name}.png', time_step]
+                    if frame == 0:
+                        with open(csv_name, 'w', newline='') as file:
+                            writer = csv.writer(file)
+                            writer.writerow(['files', 'times'])
+                            writer.writerow(data)
+                    else:
+                        with open(csv_name, 'a', newline='') as file:
+                            writer = csv.writer(file)
+                            writer.writerow(data)
+                        
+                    frame += 1
+            
         escape2 = False
         
-        while escape2 == False and escape == False:
+        while escape2 == False and escape == False: # Giving the option for the simulation to stop early
             if np.sum(energy_states[:, 0]) > 0:
-                continue_option = input(f"The specified number of steps have been completed, however there are still {np.sum(energy_states[:, 0])} high-energy electrons remaining out of the original {np.sum(high_energy_states)}, would you like to continue (Y/N): ")
+                continue_option = input(f"The specified number of steps have been completed, however, there are still {np.sum(energy_states[:, 0])} high-energy electrons remaining out of the original {np.sum(high_energy_states)}, would you like to continue (Y/N): ")
                 
                 if continue_option == 'Y':
                     n_sim_steps = int(input("How many more simulation steps would you like?: "))
@@ -192,6 +281,11 @@ def main(**args):
     # lp.speed_histogram(v0, 15)
     # lp.scatter_speeds(v0, radii)
     lp.plot_3D(r0, -charges, radii)
+    
+    if position_check:
+        print(f'Number of coordinates fianlly less than 0: {np.count_nonzero(r0 < 0)}')
+        print(f'Number of coordinates finally greater than the length of box: {np.count_nonzero(r0 > box_length)}')
+        print(f'Number of particles: {n_particles}')
 
     return
 
@@ -202,8 +296,8 @@ if __name__ == "__main__":
     params = {
         'target_packing': 0.1, # Packing faction to target (Alex used 1.68%)
         'n_particles': 150,
-        'n_eqil_steps': 1000, # Usually around 1000
-        'n_sim_steps': 20000, # Normally 20000 enough ie for the Grimsvotn ash trimodal dist fit
+        'n_eqil_steps': 0, # Usually around 1000
+        'n_sim_steps': 1000, # Normally 20000 enough ie for the Grimsvotn ash trimodal dist fit
         'radius_l': 0.3,
         'lower_radius_frac': 0.5,
         'radius_u': 1.7,
@@ -211,8 +305,8 @@ if __name__ == "__main__":
         'speed_u':2.0,
         'mass_dependent': True,
         'poly_disperse': "custom", # Should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (custom)
-        'density': 1.0,
-        'charge_density': 0.001,
+        'density': 1.0, # Default of 1.0
+        'charge_density': 0.0001,
         'log_mean': 30, # Mean of the distribution if lognormal
         'log_sd': 0.2 # Standard deviation of the distribution if lognormal
         }
