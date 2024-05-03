@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 '''
-Lacks model implimented with a simple time driven molecular dynamic simulation under the single electrontranfer assumption
+Lacks model implemented with a simple time driven molecular dynamic simulation under the single electrontranfer assumption
 2nd model iteration aimed to increse speed with only re-computing relevant colission times in the colission time matrix
 '''
 
@@ -31,6 +31,7 @@ def main(**args):
     
     # Debugging options
     position_check = False
+    energy_momentum_check = True
     
     # Create animation?
     animate = False
@@ -52,9 +53,9 @@ def main(**args):
         
     elif poly_disperse == "custom": # Edit here custom distribution, example case trimodal lognormal distribution
         
-        mode_sizes = 1.3372369011358565, 1.8294215846230424, 0.7710494963408324
-        mode_means = 2.6318881833274417, 23.901773009607787, 94.28044421263712
-        mode_stds = 0.4152722158226693, 0.41307671264643286, 0.22553581549487198
+        mode_sizes = 7.838770459987532, 0.6664704782189498
+        mode_means = 0.6536710363399434, 1.6610784451623664
+        mode_stds = 0.1039934451614678, 0.3069652952251865
     
         total_size = np.sum(mode_sizes)
         radii = np.array([])
@@ -164,6 +165,8 @@ def main(**args):
     # print(np.sum(~np.isinf(coll_times))) # Can check number of potential collisions
     print(f'Initial number of high energy states: {np.sum(high_energy_states)}')
     
+    energy_list, momentum_list = [], []
+    
     escape, equilibrated = False, False
     frame, csv_name = 0, animation_save_dir + 'timings.csv'
     
@@ -195,16 +198,9 @@ def main(**args):
                 i, j = int(np.where(coll_times == t_coll)[0][0]), int(np.where(coll_times == t_coll)[1][0]) # Which particles hit
                 wall_times -= t_coll # Update wall collision times until particle hit
                 coll_times -= t_coll # Update particle collision times until particle hit
-                
-                # Maths to find new particle trajectories
-                ui, uj, Rij, Rji = v0[i], v0[j], r0[j] - r0[i], r0[i] - r0[j]
-                mi, mj, Rij_hat, Rji_hat = masses[i], masses[j], Rij / lf.mag(Rij), Rji / lf.mag(Rji)
-                ui_para, uj_para = (np.dot(ui, Rij_hat)) * Rij_hat, (np.dot(uj, Rji_hat)) * Rji_hat
-                vi_perp, vj_perp = ui - ui_para, uj - uj_para
-                vi_para = (ui_para * (mi - mj) + 2 * mj * uj_para) / (mi + mj)
-                vj_para = (uj_para * (mj - mi) + 2 * mi * ui_para) / (mj + mi)
-                vi, vj = vi_para + vi_perp, vj_para + vj_perp
-                v0[i], v0[j] = vi, vj # Updating new velocities
+            
+                # v0[i], v0[j] = lf.calc_coll_traj(v0, r0, masses, i, j) # Maths to find new particle trajectories conserving energy but not momentum (Alex's way)
+                v0[i], v0[j] = lf.calc_coll_traj_cons(v0, r0, masses, i, j) # Maths to find new particle trajectories conserving energy and momentum (David's way)
                 
                 recalc_p = [i, j] # Particles to recalulate the particle collions for
                 wall_index = 'inf' # Not a wall hit
@@ -237,6 +233,12 @@ def main(**args):
                 
                 if wall_index == 'inf': # If particle collsion
                     coll_times[i][j] = 'inf' # Particles cant immidiately re-collide
+            
+            if energy_momentum_check: # For checking that energy and momentum are conserved
+                energy, momentum = lf.calc_energy_momentum(masses, v0)
+                energy_list.append(energy)
+                momentum_list.append(momentum)
+                # print(f'Total kinetic energy and momentum in the system: {energy} and {momentum}')
             
             if animate or save_animation: # Showing the simulation as it runs
                 name = str(frame)
@@ -282,6 +284,9 @@ def main(**args):
     # lp.scatter_speeds(v0, radii)
     lp.plot_3D(r0, -charges, radii)
     
+    if energy_momentum_check:
+        lp.track_energy_momentum(energy_list, momentum_list)
+    
     if position_check:
         print(f'Number of coordinates fianlly less than 0: {np.count_nonzero(r0 < 0)}')
         print(f'Number of coordinates finally greater than the length of box: {np.count_nonzero(r0 > box_length)}')
@@ -296,19 +301,19 @@ if __name__ == "__main__":
     params = {
         'target_packing': 0.1, # Packing faction to target (Alex used 1.68%)
         'n_particles': 150,
-        'n_eqil_steps': 0, # Usually around 1000
-        'n_sim_steps': 1000, # Normally 20000 enough ie for the Grimsvotn ash trimodal dist fit
+        'n_eqil_steps': 100000, # Usually around 1000
+        'n_sim_steps': 500000, # Normally 20000 enough ie for the Grimsvotn ash trimodal dist fit
         'radius_l': 0.3,
         'lower_radius_frac': 0.5,
         'radius_u': 1.7,
         'speed_l':1.0,
         'speed_u':2.0,
         'mass_dependent': True,
-        'poly_disperse': "custom", # Should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (custom)
+        'poly_disperse': "dustyboi", # Should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (custom)
         'density': 1.0, # Default of 1.0
-        'charge_density': 0.0001,
-        'log_mean': 30, # Mean of the distribution if lognormal
-        'log_sd': 0.2 # Standard deviation of the distribution if lognormal
+        'charge_density': 0.005,
+        'log_mean': 325.0976857912173, # Mean of the distribution if lognormal
+        'log_sd': 0.09053671829707784 # Standard deviation of the distribution if lognormal
         }
 
     output = main(**params)

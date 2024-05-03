@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import lack_functions as lf
 from matplotlib.ticker import ScalarFormatter
+from scipy.optimize import curve_fit
 
 
 
@@ -19,6 +20,9 @@ def plot_3D(data, scale, size, box_length=0, charge_range=[0, 0], show=True, sav
 
     # Plot the 3D scatter plot
     ax = fig.add_subplot(gs[0], projection='3d')
+    if box_length != 0:
+        size /= box_length
+        print(box_length)
     scatter = ax.scatter(data[:,0]/1000, data[:,1]/1000, data[:,2]/1000, s=size, c=scale, cmap='Spectral', alpha=0.6)
 
     ax.set_xlabel('X / mm')
@@ -95,29 +99,39 @@ def speed_histogram(vel_data, n_bins=15, dpi=600):
     return    
 
 
+def maxwell_boltzmann(x, A, T):
+    
+    '''Calcullates a point on a maxwell-boltzmann distribution'''
+    
+    return A * np.exp(-x / T) * (x ** 2)
+
+
 
 def ke_histogram(vel_data, masses, n_bins=15, dpi=600):
-    
     '''Plots histogram of kinetic energies of particles from array of 3D velocities'''
-    
-    speed_data = []
-    
-    for v in vel_data:
-        speed_data.append(lf.mag(v))
-    
-    speed_data = np.array(speed_data)
+    speed_data = np.array([lf.mag(v) for v in vel_data])
     ke = 0.5 * np.multiply(masses, np.square(speed_data))
     
     plt.figure(dpi=dpi)
-    plt.hist(ke, bins=n_bins)
+    bin_heights, bins, patches = plt.hist(ke, bins=n_bins, label='Simulation Data')
+    bin_centers = 0.5 * (bins[:-1] + bins[1:])
     
+    # Provide better initial guesses for parameters
+    A_fit = 1000 /  (np.mean(ke) ** 2)
+    T_fit = np.mean(ke) / 4
+
+    params, covariance = curve_fit(maxwell_boltzmann, bin_centers, bin_heights, p0=[A_fit, T_fit])
+    A_fit, T_fit = params
+    
+    x_fit = np.linspace(0, max(bin_centers), 1000) 
+    plt.plot(x_fit, maxwell_boltzmann(x_fit, A_fit, T_fit), color='red', label='Maxwell-Boltzmann Fit')
+
     plt.xlabel('Kinetic Energy / *UNITS*')
     plt.ylabel('Number of Particles')
-    
+    plt.legend()
     plt.show()
 
-    return    
-
+    return
 
 
 
@@ -139,6 +153,28 @@ def scatter_speeds(vel_data, radii, dpi=600):
     plt.xlabel('Radius / $\lambda$')
     plt.ylabel('<V>$^{-2/3}$')
     
+    plt.show()
+    
+    return
+
+
+
+def track_energy_momentum(energy_list, momentum_list, dpi=600):
+    
+    '''Plots the normalised system momentum and energy over the steps of the simulation to check conservation'''
+    
+    if len(energy_list) != len(momentum_list):
+        raise ValueError('There is a mismatch in the energy and momnetum list lengths: {energy_list} and {momentum_list}')
+        
+    plt.figure(dpi=dpi)
+    
+    steps = range(1, len(energy_list) + 1)
+    plt.plot(steps, np.array(energy_list) / energy_list[0], label='energy')
+    plt.plot(steps, np.array(momentum_list) / momentum_list[0], label='momentum')
+    plt.xlabel('Number of steps')
+    plt.ylabel('Normalised value')
+    
+    plt.legend()
     plt.show()
     
     return

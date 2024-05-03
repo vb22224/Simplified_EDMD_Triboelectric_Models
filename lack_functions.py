@@ -217,6 +217,24 @@ def calc_charge_res(x_list, y_list, a, b, c):
     
 
 
+def calc_energy_momentum(masses, v0):
+    
+    '''Calculates the total momentum and energy in the system'''
+    
+    energy, momentum = 0, 0
+    
+    if len(masses) != len(v0):
+        raise ValueError('The there are a different number of values for masses and velocites: {masses} and {v0}')
+        
+    for i, mass in enumerate(masses):
+        speed = mag(v0[i])
+        energy += 0.5 * mass * speed ** 2 
+        momentum += mass * speed
+    
+    return energy, momentum
+
+
+
 def objective_function(variables, *args):
     
     '''Used for the function minimisation with scipy.minimize'''
@@ -246,7 +264,41 @@ def get_fit(diameters, charge, initial_abc_guess=[0.003, 2, -50], minimise_op="R
     
     return a, b, c
     
+
+
+def calc_coll_traj(v0, r0, masses, i, j):
     
+    '''Calculates the trajectories of two particles i and j after a collision conserving energy'''
+    
+    ui, uj, Rij, Rji = v0[i], v0[j], r0[j] - r0[i], r0[i] - r0[j]
+    mi, mj, Rij_hat, Rji_hat = masses[i], masses[j], Rij / mag(Rij), Rji / mag(Rji)
+    ui_para, uj_para = (np.dot(ui, Rij_hat)) * Rij_hat, (np.dot(uj, Rji_hat)) * Rji_hat
+    vi_perp, vj_perp = ui - ui_para, uj - uj_para
+    vi_para = (ui_para * (mi - mj) + 2 * mj * uj_para) / (mi + mj)
+    vj_para = (uj_para * (mj - mi) + 2 * mi * ui_para) / (mj + mi)
+    vi, vj = vi_para + vi_perp, vj_para + vj_perp
+    
+    return vi, vj
+    
+    
+
+def calc_coll_traj_cons(v0, r0, masses, i, j):
+    
+    '''Calculates the trajectories of two particles i and j after a collision conserving energy and momentum'''
+    
+    m1, m2 = masses[i], masses[j]
+    v1, v2, r1, r2 = v0[i], v0[j], r0[i], r0[j]
+
+    r_rel, v_rel = r2 - r1, v2 - v1 # Calculate the relative position and velocity vectors
+    v_rel_along_line = np.dot(v_rel, r_rel) / np.linalg.norm(r_rel) # Calculate the relative velocity along the line of impact
+    v_rel_along_line_after = (v_rel_along_line * (m1 - m2) + 2 * m2 * v_rel_along_line) / (m1 + m2) # Calculate the new relative velocity along the line of impact (conservation of momentum)
+    delta_v_rel_along_line = v_rel_along_line_after - v_rel_along_line # Calculate the change in velocity
+
+    # Calculating the new velocities of particles i and j
+    vi = v0[i] + delta_v_rel_along_line * (r_rel / np.linalg.norm(r_rel))
+    vj = v0[j] - delta_v_rel_along_line * (r_rel / np.linalg.norm(r_rel))
+
+    return vi, vj
     
     
     
