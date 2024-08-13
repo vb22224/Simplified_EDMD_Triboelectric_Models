@@ -6,7 +6,7 @@ import math as m
 import pandas as pd
 import statistics as stats
 from scipy.optimize import minimize
-
+from scipy.stats import norm
 
 
 
@@ -15,6 +15,16 @@ def round_up_to_1sf(number):
     '''Rounds a number up to its highest power of 10'''
     
     result = np.ceil(number / 10**np.floor(np.log10(np.abs(number)))) * 10**np.floor(np.log10(np.abs(number)))
+    
+    return result
+
+
+
+def round_down_to_1sf(number):
+    
+    '''Rounds a number down to its highest power of 10'''
+    
+    result = np.floor(number / 10**np.floor(np.log10(np.abs(number)))) * 10**np.floor(np.log10(np.abs(number)))
     
     return result
 
@@ -125,12 +135,12 @@ def t_coll(pos_i, pos_j, vel_i, vel_j, rad_i, rad_j):
     rad_ij = rad_i + rad_j # Combined radii
     
     # Descriminant of collision equation, if positive their paths meet
-    discrim = np.dot(pos_ij, vel_ij) - (mag(vel_ij) ** 2) * ((mag(pos_ij) ** 2) - rad_ij ** 2)
+    discrim = np.dot(pos_ij, vel_ij) ** 2 - (mag(vel_ij) ** 2) * ((mag(pos_ij) ** 2) - rad_ij ** 2)
     
     t = 'inf' # No collision
     
     if discrim > 0:
-        t = (1 / (mag(vel_ij) ** 2)) * (np.dot(pos_ij, vel_ij) + m.sqrt(discrim)) # Calculate time unill collision
+        t = - (1 / (mag(vel_ij) ** 2)) * (np.dot(pos_ij, vel_ij) + m.sqrt(discrim)) # Calculate time unill collision
         if t < 0: # If particles moving away from each other
             t = 'inf'
         
@@ -196,6 +206,17 @@ def calc_charge_function(x, a=1, b=1.5, c=0):
     return y
 
 
+
+def calc_charge_function_complex(x, a=130, d=-30):
+    
+    '''Calculates function used to fit the charge '''
+    
+    y = a * x ** (2) + d * x ** (-1) # If using the ^-1 fitting
+    # y = a * x ** (2) + d * x ** (-3/2) # If -3/2 is decided as better than -1
+    
+    return y
+
+
     
 def calc_charge_res(x_list, y_list, a, b, c):
     
@@ -214,6 +235,26 @@ def calc_charge_res(x_list, y_list, a, b, c):
     R2 = 1 - SSE / SST
     
     return TR, R2
+
+
+
+def calc_charge_res_complex(x_list, y_list, a, d):
+    
+    '''Calculates the total residual and R² value between a set of values and a fit for the complex distribution shape'''
+    
+    TR, SSE, SST = 0, 0, 0
+    x_av = stats.mean(x_list)
+    
+    for n, x in enumerate(x_list):
+        y_fit = calc_charge_function_complex(x, a, d)
+        R = np.abs(y_fit - y_list[n])
+        TR += R
+        SSE += R ** 2
+        SST += (x - x_av) ** 2
+        
+    R2 = 1 - SSE / SST
+    
+    return TR, R2
     
 
 
@@ -221,7 +262,7 @@ def calc_energy_momentum(masses, v0):
     
     '''Calculates the total momentum and energy in the system'''
     
-    energy, momentum = 0, 0
+    energy, px, py, pz = 0, 0, 0, 0
     
     if len(masses) != len(v0):
         raise ValueError('The there are a different number of values for masses and velocites: {masses} and {v0}')
@@ -229,9 +270,11 @@ def calc_energy_momentum(masses, v0):
     for i, mass in enumerate(masses):
         speed = mag(v0[i])
         energy += 0.5 * mass * speed ** 2 
-        momentum += mass * speed
+        px += mass * v0[i][0]
+        py += mass * v0[i][1]
+        pz += mass * v0[i][2]
     
-    return energy, momentum
+    return energy, px, py, pz
 
 
 
@@ -263,7 +306,121 @@ def get_fit(diameters, charge, initial_abc_guess=[0.003, 2, -50], minimise_op="R
     a, b, c = result.x[0], result.x[1], result.x[2]
     
     return a, b, c
+
+
+
+def objective_function_complex(variables, *args):
     
+    '''Used for the function minimisation with scipy.minimize for the comxplex distribution shape'''
+    
+    x_list, y_list, minimise_op = args
+
+    a, d = variables[0], variables[1]
+    TR, R2 = calc_charge_res_complex(x_list, y_list, a, d)
+    
+    if minimise_op == "TR":
+        result = TR
+    elif minimise_op == "R2":
+        result = 1 - R2
+    else:
+        raise ValueError(f"minimise_op should be either total residual (TR), or R² value (R2). Not: {minimise_op}.")
+
+    return result
+
+
+
+def get_fit_complex(diameters, charge, initial_ad_guess=[130, -33], minimise_op="R2"):
+    
+    '''Gets the optimised fit for the charge for the comxplex distribution shape'''
+    
+    result = minimize(objective_function_complex, initial_ad_guess, args=(diameters, charge, minimise_op))
+    a, d = result.x[0], result.x[1]
+    
+    return a, d
+    
+
+
+def check_modes(mode_sizes, mode_means, mode_stds):
+    
+    '''Checks the modes are the same length and given then sums them'''
+    
+    if len(mode_sizes) < 1:     
+        raise ValueError("No mode sizes given")
+
+    elif len(mode_sizes) != len(mode_means) or len(mode_sizes) != len(mode_stds):   
+        raise ValueError("Mode parameter lengths differ")
+    
+    total_size = np.sum(mode_sizes)
+    
+    return total_size
+
+
+
+def calc_size_freq(d, mode_sizes, mode_means, mode_stds, truncate=float('inf')):
+    
+    '''Function to calulate the frequency denisity for a given particle size'''
+
+    frequency_density = 0
+    total_size = check_modes(mode_sizes, mode_means, mode_stds)
+    
+    for number, mode_size in enumerate(mode_sizes):
+        frequency_density += (mode_size / total_size) * norm.pdf(np.log10(d), np.log10(mode_means[number]), mode_stds[number])
+    
+    if d > truncate: # truncates the fequency density function
+        frequency_density = 0
+    
+    return frequency_density
+
+
+
+def linear_interp(x, x1, x2, y1, y2):
+    
+    '''Performas a linear interpolation'''
+
+    y = y1 + (x - x1) * (y2 - y1) / (x2 - x1)
+
+    return y
+
+
+
+def log_trap_int(x_array, y_array, x1=0, x2=float('inf')):
+    
+    '''Performs a numerical integration in logspace using the trapezium rule bewteen the limits x1 and x2'''
+
+    x_array = np.log10(x_array)  # Normalising in logspace
+    
+    if x1 == 0:
+        x1 = min(x_array)
+    if x2 == float('inf'):
+        x2 = max(x_array)
+    
+    total_integral = 0
+
+    for i in range(1, len(x_array)):
+        x = x_array[i]
+        if x > x1 and x < x2:
+            total_integral += (x - x_array[i - 1]) * \
+                (y_array[i] + y_array[i - 1]) / 2
+            if x_array[i - 1] > x:  # correction at beginning of trapezium
+                y_x1 = linear_interp(
+                    x_array[i - 1], x1, x, y_array[i - 1], y_array[i])
+                total_integral -= (x1 - x_array[i - 1]) * \
+                    (y_x1 + y_array[i - 1]) / 2
+
+    return total_integral
+
+
+
+def get_half(x_array, y_array):
+    
+    '''Gets the x value for y = 0.5 in a cumulative distribution'''
+    
+    for n, y in enumerate(y_array[:-1]):
+        if y_array[n + 1] >= 0.5:
+            x_at_half = linear_interp(0.5, y,y_array[n + 1], x_array[n], x_array[n + 1])
+            break
+    
+    return x_at_half
 
 
 def calc_coll_traj(v0, r0, masses, i, j):
@@ -280,25 +437,28 @@ def calc_coll_traj(v0, r0, masses, i, j):
     
     return vi, vj
     
-    
+
 
 def calc_coll_traj_cons(v0, r0, masses, i, j):
     
     '''Calculates the trajectories of two particles i and j after a collision conserving energy and momentum'''
     
     m1, m2 = masses[i], masses[j]
-    v1, v2, r1, r2 = v0[i], v0[j], r0[i], r0[j]
-
-    r_rel, v_rel = r2 - r1, v2 - v1 # Calculate the relative position and velocity vectors
-    v_rel_along_line = np.dot(v_rel, r_rel) / np.linalg.norm(r_rel) # Calculate the relative velocity along the line of impact
-    v_rel_along_line_after = (v_rel_along_line * (m1 - m2) + 2 * m2 * v_rel_along_line) / (m1 + m2) # Calculate the new relative velocity along the line of impact (conservation of momentum)
-    delta_v_rel_along_line = v_rel_along_line_after - v_rel_along_line # Calculate the change in velocity
-
+    u1, u2, r1, r2 = v0[i], v0[j], r0[i], r0[j]
+    e = 1 #coefficient of restitution
+     
+    r_rel = r2 - r1 # Calculate the relative position vectors
+    r_rel_norm = r_rel / np.linalg.norm(r_rel) # Calculate the relative velocity along the line of impact
+    m_eff = 1 / ((1/m1) + (1/m2))
+    v_imp = np.dot(r_rel_norm, (u1 - u2))
+    J = (1 + e) * m_eff * v_imp
+    delta_v1 = (- J / m1) * r_rel_norm
+    delta_v2 = (J / m2) * r_rel_norm
+     
     # Calculating the new velocities of particles i and j
-    vi = v0[i] + delta_v_rel_along_line * (r_rel / np.linalg.norm(r_rel))
-    vj = v0[j] - delta_v_rel_along_line * (r_rel / np.linalg.norm(r_rel))
-
+    vi = u1 + delta_v1
+    vj = u2 + delta_v2
+     
     return vi, vj
-    
-    
+
     

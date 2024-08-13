@@ -22,7 +22,7 @@ def plot_3D(data, scale, size, box_length=0, charge_range=[0, 0], show=True, sav
     ax = fig.add_subplot(gs[0], projection='3d')
     if box_length != 0:
         size /= box_length
-        print(box_length)
+
     scatter = ax.scatter(data[:,0]/1000, data[:,1]/1000, data[:,2]/1000, s=size, c=scale, cmap='Spectral', alpha=0.6)
 
     ax.set_xlabel('X / mm')
@@ -159,18 +159,20 @@ def scatter_speeds(vel_data, radii, dpi=600):
 
 
 
-def track_energy_momentum(energy_list, momentum_list, dpi=600):
+def track_energy_momentum(energy_list, px_list, py_list, pz_list, dpi=600):
     
     '''Plots the normalised system momentum and energy over the steps of the simulation to check conservation'''
     
-    if len(energy_list) != len(momentum_list):
-        raise ValueError('There is a mismatch in the energy and momnetum list lengths: {energy_list} and {momentum_list}')
+    if len(energy_list) != len(px_list) or len(energy_list) != len(py_list) or len(energy_list) != len(pz_list):
+        raise ValueError(f'There is a mismatch in the energy and momnetum list lengths: {len(energy_list)} and {len(px_list)}, {len(py_list)}, {len(pz_list)}')
         
     plt.figure(dpi=dpi)
     
     steps = range(1, len(energy_list) + 1)
     plt.plot(steps, np.array(energy_list) / energy_list[0], label='energy')
-    plt.plot(steps, np.array(momentum_list) / momentum_list[0], label='momentum')
+    plt.plot(steps, np.array(px_list) / px_list[0], label='momentum (x)')
+    plt.plot(steps, np.array(py_list) / py_list[0], label='momentum (y)')
+    plt.plot(steps, np.array(pz_list) / pz_list[0], label='momentum (z)')
     plt.xlabel('Number of steps')
     plt.ylabel('Normalised value')
     
@@ -214,7 +216,39 @@ def plot_fit(a, b, c, x_min, x_max, N=1000):
     
     return
     
+
+
+def plot_fit_complex(a, d, x_min, x_max, N=1000):
     
+    '''Plots a function of y = a * x ^ 2 + d * x ^ - 1'''
+    
+    x_list = np.linspace(x_min, x_max + 1, num=N).tolist()
+    y_list = []
+    
+    for x in x_list:
+        y_list.append(lf.calc_charge_function_complex(x, a, d))
+    
+    plt.plot(x_list, y_list, "--", color='black')
+    
+    return
+
+
+
+def plot_size_dists(dp_fit, vol_density, num_density, y_label='Normalised Frequency Density', dpi=600):
+    
+    '''Plots the size distributions'''
+    
+    plt.figure(dpi=dpi)
+    plt.plot(dp_fit, vol_density, label='Volume')
+    plt.plot(dp_fit, num_density, label='Number')
+    
+    plt.xscale('log')
+    plt.xlabel('d$_p$ / $\mu$m')
+    plt.ylabel(y_label)
+    plt.legend()
+    plt.show()
+    
+    return
 
 
 

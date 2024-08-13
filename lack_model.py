@@ -31,7 +31,7 @@ def main(**args):
     
     # Debugging options
     position_check = False
-    energy_momentum_check = True
+    energy_momentum_check = False
     
     # Create animation?
     animate = False
@@ -51,11 +51,11 @@ def main(**args):
     elif poly_disperse == "lognorm": # Lognormal
         radii = (10 ** np.random.normal(loc=np.log10(log_mean), scale=log_sd, size=n_particles)) / 2 # divied by 2 as radii
         
-    elif poly_disperse == "custom": # Edit here custom distribution, example case trimodal lognormal distribution
+    elif poly_disperse == "multimodal": # Edit here custom distribution, example case trimodal lognormal distribution
         
-        mode_sizes = 7.838770459987532, 0.6664704782189498
-        mode_means = 0.6536710363399434, 1.6610784451623664
-        mode_stds = 0.1039934451614678, 0.3069652952251865
+        mode_sizes = 0.9998908343003384, 0.00010916569966157586
+        mode_means = 140.00269129864694, 1999.999926146656
+        mode_stds = 0.2822161924076099, 0.1779400474177674
     
         total_size = np.sum(mode_sizes)
         radii = np.array([])
@@ -69,7 +69,45 @@ def main(**args):
         radii = radii[radii <= truncation]
         
         n_particles = len(radii) # In case a particle has been lost / gained in rounding or truncating
+    
+    elif poly_disperse == "convert vol":
         
+        dp_fit = np.logspace(np.log10(0.1), np.log10(10000), 1000, base=10) # Continua for fit calculation
+        vp = np.pi * np.power(dp_fit, 3) / 6 # Volume at each size
+        truncate = float('inf')
+        vol_density, radii = [], np.array([])
+        
+        # Information about the volume distribution to be converted
+        mode_sizes = [0.12047909541723714, 0.8699151732927874]
+        mode_means = [69.41390100092396, 155.46376875563044]
+        mode_stds = [0.09710018329900653, 0.1262506307566037]
+        
+        for d in dp_fit: # Calculating multimodal volume density
+            vol_density.append(lf.calc_size_freq(d, mode_sizes, mode_means, mode_stds, truncate))
+        
+        vol_density = np.array(vol_density)
+        num_density = vol_density / vp # Converting to number density
+        
+        vol_density /= lf.log_trap_int(dp_fit, vol_density) # Normalisations
+        num_density /= lf.log_trap_int(dp_fit, num_density)
+        vol_cum = np.cumsum(vol_density) / sum(vol_density) # Cumulative Dstributions
+        num_cum = np.cumsum(num_density) / sum(num_density)
+        
+        # Information on the diffenternt distribution averages
+        print(f'Max volume density: {dp_fit[np.argmax(vol_density)]}')
+        print(f'Max number density: {dp_fit[np.argmax(num_density)]}') 
+        print(f'Half volume density: {lf.get_half(dp_fit, vol_cum)}')
+        print(f'Half number density: {lf.get_half(dp_fit, num_cum)}')
+        
+        lp.plot_size_dists(dp_fit, vol_density, num_density, y_label='Normalised Frequency Density', dpi=200) # Plotting distributions
+        lp.plot_size_dists(dp_fit, vol_cum, num_cum, y_label='Cumulative Frequency Density', dpi=200) # Plotting cumulative distributions
+
+        for n in range(n_particles):
+            radii = np.concatenate((radii, dp_fit[np.argwhere(num_cum > np.random.rand())[0]] / 2))
+
+        n_particles = len(radii) # In case a particle has been lost / gained in rounding or truncating
+
+    
     elif poly_disperse == "dustyboi": # David's distribution
         
         quantity = np.round(n_particles * np.array([0.128315105, 0.183572807, 0.124311959, 0.087425835, 0.062477661, 0.051611981, 0.135821002, 0.208449496, 0.018014154]))
@@ -81,7 +119,7 @@ def main(**args):
         n_particles = np.size(radii)
 
     else:
-        raise ValueError("poly_disperse should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (custom).")
+        raise ValueError("poly_disperse should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (multimodal).")
         
     # Setting Particle Mass
     
@@ -165,7 +203,7 @@ def main(**args):
     # print(np.sum(~np.isinf(coll_times))) # Can check number of potential collisions
     print(f'Initial number of high energy states: {np.sum(high_energy_states)}')
     
-    energy_list, momentum_list = [], []
+    energy_list, px_list, py_list, pz_list = [], [], [], []
     
     escape, equilibrated = False, False
     frame, csv_name = 0, animation_save_dir + 'timings.csv'
@@ -235,10 +273,12 @@ def main(**args):
                     coll_times[i][j] = 'inf' # Particles cant immidiately re-collide
             
             if energy_momentum_check: # For checking that energy and momentum are conserved
-                energy, momentum = lf.calc_energy_momentum(masses, v0)
+                energy, px, py, pz = lf.calc_energy_momentum(masses, v0)
                 energy_list.append(energy)
-                momentum_list.append(momentum)
-                # print(f'Total kinetic energy and momentum in the system: {energy} and {momentum}')
+                px_list.append(px)
+                py_list.append(py)
+                pz_list.append(pz)
+                # print(f'Total kinetic energy and momentum (x, y, z) in the system: {energy} and {px}, {py}, {pz}')
             
             if animate or save_animation: # Showing the simulation as it runs
                 name = str(frame)
@@ -282,10 +322,10 @@ def main(**args):
     # lp.size_histogram(radii, n_bins=15)
     # lp.speed_histogram(v0, 15)
     # lp.scatter_speeds(v0, radii)
-    lp.plot_3D(r0, -charges, radii)
+    lp.plot_3D(r0, -charges, radii, box_length / 1000)
     
     if energy_momentum_check:
-        lp.track_energy_momentum(energy_list, momentum_list)
+        lp.track_energy_momentum(energy_list, px_list, py_list, pz_list)
     
     if position_check:
         print(f'Number of coordinates fianlly less than 0: {np.count_nonzero(r0 < 0)}')
@@ -300,7 +340,7 @@ if __name__ == "__main__":
 
     params = {
         'target_packing': 0.1, # Packing faction to target (Alex used 1.68%)
-        'n_particles': 150,
+        'n_particles': 300,
         'n_eqil_steps': 100000, # Usually around 1000
         'n_sim_steps': 500000, # Normally 20000 enough ie for the Grimsvotn ash trimodal dist fit
         'radius_l': 0.3,
@@ -309,12 +349,15 @@ if __name__ == "__main__":
         'speed_l':1.0,
         'speed_u':2.0,
         'mass_dependent': True,
-        'poly_disperse': "dustyboi", # Should be lognormal (lognorm), linear (lin), bidisperse (bi), or custom (custom)
+        'poly_disperse': "convert vol", # Options: lognormal (lognorm), linear (lin), bidisperse (bi), custom (multimodal), multimodal volume distribution to convert (convert vol), David's distribution (dustyboi)
         'density': 1.0, # Default of 1.0
-        'charge_density': 0.005,
+        'charge_density': 0.01,
         'log_mean': 325.0976857912173, # Mean of the distribution if lognormal
         'log_sd': 0.09053671829707784 # Standard deviation of the distribution if lognormal
         }
 
     output = main(**params)
     #print(output)
+    
+    
+    
