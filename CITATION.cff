@@ -6,6 +6,6 @@ authors:
 - family-names: Reid
   given-names: David
 title: "Simplified_EDMD_Triboelectric_Models"
-version: v1.0.1  # Match with the GitHub release
+version: v1.0.1
 date-released: 2024-09-17
 license: "GPL-3.0"
