@@ -5,7 +5,6 @@ authors:
   given-names: Tom
 - family-names: Reid
   given-names: David
-  orcid: https://orcid.org/0000-0002-8423-6234
 title: "Simplified_EDMD_Triboelectric_Models"
 version: v1.0.1  # Match with the GitHub release
 date-released: 2024-09-17
