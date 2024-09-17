@@ -3,7 +3,6 @@ message: "Please cite this software as described below."
 authors:
 - family-names: O'Hara
   given-names: Tom
-  orcid: https://orcid.org/0009-0002-4444-3455
 - family-names: Reid
   given-names: David
   orcid: https://orcid.org/0000-0002-8423-6234
