@@ -78,9 +78,9 @@ def main(**args):
         vol_density, radii = [], np.array([])
         
         # Information about the volume distribution to be converted
-        mode_sizes = [0.12047909541723714, 0.8699151732927874]
-        mode_means = [69.41390100092396, 155.46376875563044]
-        mode_stds = [0.09710018329900653, 0.1262506307566037]
+        mode_sizes = [0.2702522105709556, 0.5377299225945315, 0.14637881818382076]
+        mode_means = [47.68674473289051, 129.87119736614284, 600.1805862890564]
+        mode_stds = [0.16414445691995336, 0.1917548803130691, 0.37970119431980565]
         
         for d in dp_fit: # Calculating multimodal volume density
             vol_density.append(lf.calc_size_freq(d, mode_sizes, mode_means, mode_stds, truncate))
@@ -341,8 +341,8 @@ if __name__ == "__main__":
     params = {
         'target_packing': 0.1, # Packing faction to target (Alex used 1.68%)
         'n_particles': 300,
-        'n_eqil_steps': 100000, # Usually around 1000
-        'n_sim_steps': 500000, # Normally 20000 enough ie for the Grimsvotn ash trimodal dist fit
+        'n_eqil_steps': 100000, # Usually around 100000
+        'n_sim_steps': 500000, 
         'radius_l': 0.3,
         'lower_radius_frac': 0.5,
         'radius_u': 1.7,
@@ -351,7 +351,7 @@ if __name__ == "__main__":
         'mass_dependent': True,
         'poly_disperse': "convert vol", # Options: lognormal (lognorm), linear (lin), bidisperse (bi), custom (multimodal), multimodal volume distribution to convert (convert vol), David's distribution (dustyboi)
         'density': 1.0, # Default of 1.0
-        'charge_density': 0.01,
+        'charge_density': 0.05,
         'log_mean': 325.0976857912173, # Mean of the distribution if lognormal
         'log_sd': 0.09053671829707784 # Standard deviation of the distribution if lognormal
         }
