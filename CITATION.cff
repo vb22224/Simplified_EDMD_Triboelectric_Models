@@ -1,5 +1,5 @@
 cff-version: 1.1.0
-message: "If you use this software, please cite it as below."
+message: "Please cite this software as described below."
 authors:
 - family-names: O'Hara
   given-names: Tom
@@ -10,4 +10,4 @@ authors:
 title: "Simplified_EDMD_Triboelectric_Models"
 version: v1.0.0
 date-released: 2024-09-17
-license: GPL-3.0 license
+license: "GPL-3.0-only"
