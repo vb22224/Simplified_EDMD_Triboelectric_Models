@@ -1,8 +1,13 @@
-cff-version: 1.2.0
-title: Simplified_EDMD_Triboelectric_Models
-version: 1.0.0
+cff-version: 1.1.0
+message: "If you use this software, please cite it as below."
 authors:
-  - name: Tom O'Hara
-url: https://github.com/vb22224/Simplified_EDMD_Triboelectric_Models.git
-Date: 15/03/2024
+- family-names: O'Hara
+  given-names: Tom
+  orcid: https://orcid.org/0009-0002-4444-3455
+- family-names: Reid
+  given-names: David
+  orcid: https://orcid.org/0000-0002-8423-6234
+title: "Simplified_EDMD_Triboelectric_Models"
+version: v1.0.0
+date-released: 2024-09-17
 license: GPL-3.0 license
