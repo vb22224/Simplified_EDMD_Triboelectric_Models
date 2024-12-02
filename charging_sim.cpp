@@ -17,28 +17,29 @@
 // Define class containing all model parameters, and initialise
 class Params {
 public:
-    double box_length = 1800.0;
+    double box_length = 2000.0; //um
+    double packing_density = 0.10;
     int init_particles = 150;
     int n_particles = 0;
     int n_eqil_steps = 10000000;
     int n_max_arrangement = 100000;
-    double speed_l = 1.0;
-    double speed_u = 2.0;
-    double density = 1.29e-12;
-    double charge_density = 1.0;
-    double temperature = 300.00;
+    double speed_l = 1.0; //um/s
+    double speed_u = 2.0; //um/s
+    double density = 1.40e-15; //1.40g/cm^3 from mgs1 data sheet converted to kg/um^3
+    double charge_density = 1.0; //electrons/um^2
+    double temperature = 300.00; //K
 };
 
 // Define class containing all particle parameters and some basic functions
 class Particle {
 public:
-    double r;
-    double mass;
+    double r; // um
+    double mass; //kg
     int initial_high_e;
     int high_e;
     int low_e;
-    double v[3];
-    double pos[3];
+    double v[3]; //um/s
+    double pos[3]; //um
 
     // Function to set particle mass
     void spherical_mass(double density){
@@ -295,6 +296,21 @@ double calc_den(std::vector<Particle>& parts, double box, double n){
 
     // Return ratio of volumes
     return p_vol/b_vol;
+}
+
+// Function to work out how size of box for desired packing density
+double size_box(std::vector<Particle>& parts, double packing_density, double n){
+    // Box volume is cube
+    // add the spherical volume of each particle
+    double p_vol = 0.0;
+    for (int i = 0; i < n; ++i){
+        p_vol += ((4/3) * M_PI * std::pow(parts[i].r,3));
+    }
+
+    double box = 0.0;
+    box = std::pow(p_vol/packing_density,1.0/3.0);
+    // Return ratio of volumes
+    return box;
 }
 
 // Function to check if particles overlap
@@ -790,6 +806,9 @@ int main(){
 
     // Initialise particle radii
     initializeParticleRadii(parts, params);
+
+    params.box_length = size_box(parts, params.packing_density, params.n_particles);
+
 
     // Initialise other particle aspects
     for (int i = 0; i < params.n_particles; ++i) {
